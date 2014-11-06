@@ -7,8 +7,13 @@
 #include <netinet/ip.h>
 #include <netinet/in.h>
 #include "server.h"
+#include "responses.h"
 
 char* appName = "server_p";
+
+void replyToClient(int socketFd);
+int readFile(char* fileName, char* data);
+char* getRequestedFile(char* request);
 
 void runServer(int port, char* docDir, char* logDir)
 {
@@ -57,7 +62,7 @@ void runServer(int port, char* docDir, char* logDir)
 //"h1 { font-size:4cm; text-align: center; color: black;"
 //" text-shadow: 0 0 2mm red}</style></head>"
 //"<body><h1>Goodbye, world!</h1></body></html>\r\n";
-		char response_400[] = "HTTP/1.1 400 Bad Request\r\n"
+/*		char response_400[] = "HTTP/1.1 400 Bad Request\r\n"
 "Date: Mon 21 Jan 2008 18:06:16 GMT\r\n"
 "Content-Type: text/html; charset=UTF-8\r\n\r\n"
 //"Content-Length: 107\r\n\r\n"
@@ -66,7 +71,7 @@ void runServer(int port, char* docDir, char* logDir)
 "Your browser sent a request I could not understand."
 "</body></html>\r\n";
 
-		char response_400_frompdf[] = "HTTP/1.1 400 Bad Request\r\n"
+*/		char response_400_frompdf[] = "HTTP/1.1 400 Bad Request\r\n"
 "Date: Mon 21 Jan 2008 18:06:16 GMT\r\n"
 "Content-Type: text/html\r\n"
 "Content-Length: 107\r\n\r\n"
@@ -74,9 +79,52 @@ void runServer(int port, char* docDir, char* logDir)
 "<h2>Malformed Request</h2>\r\n"
 "Your browser sent a request I could not understand.\r\n"
 "<body></html>\r\n";
-		write(snew, response_400_frompdf, sizeof(response_400_frompdf) - 1);
+		char* response400 = getBadRequestResponse();
+		int compare = strncmp(response_400_frompdf, response400, 20);
+		if(compare != 0) {
+			printf("Not equal");
+		}
+		printf("\nGood:\n\n%s\n\n----------\n\nBad:\n\n%s\n\n----------\n", response_400_frompdf, response400);
+
+		char indexFile[512];
+		char fileBuffer[512];
+
+		sprintf(indexFile, "%s%s", docDir, "/index.html");
+		int fileLength = readFile(indexFile, fileBuffer);
+		printf( "Length: %i\nData: %s\nstrlen(Data): %i\n", fileLength, fileBuffer, strlen(fileBuffer) );
+		printf( "Response: \n---------\n%s\n-----------\n\n", getValidRequest(fileBuffer));
+		char* validResponse = getValidRequest(fileBuffer);
+
+		write(snew, validResponse, strlen(validResponse) - 1);
 		close(snew);
-		
 	}
 
+}
+
+int readFile(char* fileName, char* data) {
+	FILE* file;
+	char line[90];
+	int fileLength = 0;
+
+	file = fopen(fileName, "rt");
+	if(file == NULL) {
+		return -1; /* error code for failure to open file */
+	}
+	while(feof(file) == 0) {
+		if(fgets(line, 90, file) != NULL) {
+			strcpy(data, line);
+			fileLength += strlen(line);
+			data += strlen(line);
+		}
+	}
+	fclose(file);
+	return fileLength;
+}
+		
+char* getRequestedFile(char* request) {
+	int lineLength = 0;
+	while(request[lineLength] != '\n') {
+		++lineLength;
+	}
+	
 }
