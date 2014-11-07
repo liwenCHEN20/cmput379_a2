@@ -25,6 +25,7 @@ void sendErrorResponse(eError error, int sockId, char* responseCode);
 
 void runServer(int port, char* docDir, char* logDir)
 {
+	daemon(0, 1);
 	printf("port: %i\ndocDir: %s\nlogDir: %s\n", port, docDir, logDir);
 
 	char test[] = "12345";
@@ -132,21 +133,7 @@ void handleConnection(int sockId) {
 }
 
 void sendErrorResponse(eError error, int sockId, char* responseCode) {
-	char* response;
-	switch(error) {
-		case BAD_REQUEST:
-			response = getBadRequestResponse();
-			break;
-		case NOT_FOUND:
-			response = getNotFoundResponse();
-			break;
-		case FORBIDDEN:
-			response = getForbiddenResponse();
-			break;
-		case INTERNAL_ERROR:
-			response = getInternalErrorResponse();
-			break;
-	}
+	char* response = getErrorResponse(error);
 	
 	write(sockId, response, strlen(response));
 	getResponseCode(response, responseCode);

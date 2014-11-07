@@ -1,3 +1,5 @@
+#ifndef SERVER_H
+#define SERVER_H
 typedef enum {
 	BAD_REQUEST,
 	NOT_FOUND,
@@ -6,3 +8,4 @@ typedef enum {
 } eError;
 void runServer(int port, char* docDir, char* logDir);
 void handleConnection(int sockFd);
+#endif /* SERVER_H */
