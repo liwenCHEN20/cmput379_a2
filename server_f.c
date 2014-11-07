@@ -3,7 +3,12 @@
 
 char* appName = "server_f";
 
-void runServer(int port, char* docDir, char* logDir)
-{
-	printf("port: %i\ndocDir: %s\nlogDir: %s\n", port, docDir, logDir);
+void handleRequest(int sockFd) {
+	if(fork() <= 0) {
+		return;
+	}
+	else {
+		handleConnection(sockFd);
+	}
+
 }

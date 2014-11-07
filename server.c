@@ -10,7 +10,6 @@
 #include "responses.h"
 #include "logging.h"
 
-char* appName = "server";
 char* gDocDir;
 char* gLogDir;
 
@@ -20,6 +19,8 @@ char* getHeader(char* request);
 char* getRequestedFile(char* request);
 void handleConnection(int sockId);
 void getIpAddress(int sockId, char* ip);
+
+extern void handleRequest(int sockFd);
 
 void runServer(int port, char* docDir, char* logDir)
 {
@@ -60,13 +61,15 @@ void runServer(int port, char* docDir, char* logDir)
 			perror("Server: accept failed");
 			exit(1);
 		}
-		handleConnection(snew);
+		printf("sending id: %i\n", snew);
+		handleRequest(snew);
 
 	}
 
 }
 
 void handleConnection(int sockId) {
+	printf("received id: %i\n", sockId);
 	char clientRequest[512];
 	read(sockId, clientRequest, sizeof(clientRequest) - 1);
 
@@ -182,7 +185,7 @@ int getResponseCode(char* header, char* responseCode) {
 
 	char* temp = strsep(&myHeader, " ");
 	printf("temp: \n%s\n", temp);
-	printf("myHeader: \n%s\m", myHeader);
+	printf("myHeader: \n%s\n", myHeader);
 	if(strncmp(temp, "HTTP/1.1", 8) != 0) {
 		return -1;
 	}
