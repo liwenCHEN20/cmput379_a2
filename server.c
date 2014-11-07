@@ -21,17 +21,15 @@ char* getRequestedFile(char* request);
 void handleConnection(int sockId);
 void getIpAddress(int sockId, char* ip);
 
-extern int handleRequest(int sockFd);
+extern int handleRequest(int oldSockFd, int newSockFd);
 void sendErrorResponse(eError error, int sockId, char* responseCode);
 
 void runServer(int port, char* docDir, char* logDir)
 {
-	daemon(0, 0);
+	/* makes child processes get automatically cleaned up
+	 * since we don't care about what they return.
+	 */
 	signal(SIGCHLD, SIG_IGN);
-	printf("port: %i\ndocDir: %s\nlogDir: %s\n", port, docDir, logDir);
-
-	char test[] = "12345";
-	printf("strlen(test): %i\n", strlen(test));
 
 	gDocDir = docDir;
 	gLogDir = logDir;
@@ -41,6 +39,10 @@ void runServer(int port, char* docDir, char* logDir)
 	struct sockaddr_in master, from;
 
 	sock = socket( AF_INET, SOCK_STREAM, 0);
+
+	/* Following two lines taken from Kirby Banman on the discussion forum */
+	int optval = 1;
+	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
 	if( sock < 0 ) {
 		perror( "Server: cannot open master socket");
 		exit(1);
@@ -55,49 +57,45 @@ void runServer(int port, char* docDir, char* logDir)
 		exit(1);
 	}
 
-	number = 0;
+	//daemon(0, 0);
+	
 	listen(sock, 16);
 
 	while(1) {
 		fromlength = sizeof(from);
+		printf("Waiting to accept new connection\n");
 		snew = accept(sock, (struct sockaddr*) &from, &fromlength);
 		if(snew < 0) {
 			perror("Server: accept failed");
 			exit(1);
 		}
-		printf("sending id: %i\n", snew);
+		printf("Accepted socket: %i\n", snew);
 		/* HandleRequest returns 0 for the main process/thread */
-		if(handleRequest(snew) != 0)
+		if(handleRequest(sock, snew) != 0)
 		{
 			break;
 		}
+		printf("Request handled!\n");
 
 	}
 
 }
 
 void handleConnection(int sockId) {
-	printf("received id: %i\n", sockId);
 	char clientRequest[512];
 	read(sockId, clientRequest, sizeof(clientRequest) - 1);
 
 	char* ip = malloc(sizeof(char) * 100);
 	getIpAddress(sockId, ip);
-	printf("IP: \n%s\n", ip);
 
 	char* requestHeader = getHeader(clientRequest);
-	printf("request: \n%s\n", clientRequest);
-	printf("request header: \n%s\n", requestHeader);
+
 	char* requestedFile = malloc(sizeof(char) * 512);
 	int ecode = processRequestHeader(requestHeader, requestedFile);
-	printf("requested file: \n%s\n", requestedFile);
 	char responseCode[64];
 	if(ecode) {
-		// 400 bad request
-		printf("400 bad request\n");
 		sendErrorResponse(BAD_REQUEST, sockId, responseCode);
 		logErrorMessage(gLogDir, ip, requestHeader, responseCode);
-		
 	}
 	else {
 		char fileData[512];
@@ -105,33 +103,22 @@ void handleConnection(int sockId) {
 		sprintf(fullPath, "%s%s", gDocDir, requestedFile);
 		int fileSize = readFile(fullPath, fileData);
 		if(fileSize == -1) {
-			// 404 file not found
-			printf("404 File not Found\n");
 			sendErrorResponse(NOT_FOUND, sockId, responseCode);
 			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
 		else if(fileSize == -2) {
-			// 403 forbidden
-			printf("403 forbidden\n");
 			sendErrorResponse(FORBIDDEN, sockId, responseCode);
 			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
 		else if( fileSize == -3) {
-			// 500 internal error
-			printf("500 internal error\n");
 			sendErrorResponse(INTERNAL_ERROR, sockId, responseCode);
 			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
 		else {
-			printf("file data: \n%s\n", fileData);
-			// 200 ok
 			char* validResponse = getValidRequest(fileData);
-			printf("response: \n%s\n", validResponse);
 			int bytesWritten = write(sockId, validResponse, strlen(validResponse));
 			char responseCode[64];
 			int error = getResponseCode(validResponse, responseCode);
-			printf("responsecode: \n%s\n", responseCode);
-			printf("bytes written %i\nsize of response: %i\n", bytesWritten, strlen(validResponse));
 			logSuccessMessage(gLogDir, ip, requestHeader, responseCode, bytesWritten, strlen(validResponse));
 		}
 	}
@@ -140,8 +127,6 @@ void handleConnection(int sockId) {
 
 void sendErrorResponse(eError error, int sockId, char* responseCode) {
 	char* response = getErrorResponse(error);
-	
-	printf("RESPONSE:\n%s\n------------------------------", response);
 	write(sockId, response, strlen(response));
 	getResponseCode(response, responseCode);
 }
@@ -154,14 +139,14 @@ int readFile(char* fileName, char* data) {
 	file = fopen(fileName, "rt");
 	if(file == NULL) {
 		if(errno == ENOENT) {
-			return -1; // file doesn't exist!
+			return -1; /* file doesn't exist! */
 		}
 		else if(errno == EACCES) {
-			return -2; // no permissions!
+			return -2; /* no permissions! */
 		}
 		else {
 
-			return -3; // other error.
+			return -3; /* other error. */
 		}
 	}
 	while(feof(file) == 0) {
@@ -183,7 +168,6 @@ char* getHeader(char* request) {
 	strcpy(tempRequest, request);
 
 	char* header = strsep(&tempRequest, "\r");
-	//printf("Before newline: --\n%s\n---\nAfter newline: --\n%s\n", header, tempRequest);
 	return header;
 }
 
@@ -210,8 +194,6 @@ int getResponseCode(char* header, char* responseCode) {
 	strcpy(myHeader, header);
 
 	char* temp = strsep(&myHeader, " ");
-	printf("temp: \n%s\n", temp);
-	printf("myHeader: \n%s\n", myHeader);
 	if(strncmp(temp, "HTTP/1.1", 8) != 0) {
 		return -1;
 	}
@@ -232,15 +214,11 @@ char* getRequestedFile(char* request) {
 
 	get = strsep(&buffer, " ");
 	if(strncmp(get, "GET", 3) != 0) {
-		// error - bad format
+		/* error - bad format */
 	}
 	else {
 		strcpy(file, strsep(&buffer, " "));
-		//http = strsep(&buffer, "\n");
-	//	printf("~~~~\n%s\n~~~~", buffer);
 		http = strsep(&buffer, "\n");
-	//	printf("\n--1--\n%s\n--2--\n%s\n--3--\n", http, buffer);
-		//strcpy(http, strsep(&buffer, "\n"));
 		if(strncmp(http, "HTTP/1.1", 8) != 0) {
 			// error - bad format
 		}
@@ -257,8 +235,6 @@ void getIpAddress(int sockId, char* ip) {
 		printf("ip didnt work!\n");
 		printf("error: %s\n", strerror(errno) );
 	}
-	printf("%i, %i\n", from.sin_family, AF_INET);
 	char* tempIp = inet_ntoa(from.sin_addr);
-	printf("tempip: %s\n", tempIp);
 	strcpy(ip, tempIp);
 }

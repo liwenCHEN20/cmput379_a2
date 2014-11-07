@@ -153,7 +153,7 @@ char* getErrorResponse(eError error) {
 			break;
 		case NOT_FOUND:
 			return buildErrorResponse("404 Not Found",
-				"<html><body>\r\nDocument not found</h2>\r\n"
+				"<html><body>\r\n<h2>Document not found</h2>\r\n"
 				"You asked for a document that doesn't exist. That is so sad.\r\n"
 				"</body></html>\r\n");
 			break;
@@ -195,8 +195,9 @@ char* buildErrorResponse(char* header, char* content) {
  * data.
  */
 char* shrinkString(char* string) {
-	int size = strlen(string);
+	int size = strlen(string)+1;
 	char* newString = malloc(sizeof(char) * size);
+	newString[size-1] = '\0';
 	sprintf(newString, "%s", string);
 	return newString;
 }
