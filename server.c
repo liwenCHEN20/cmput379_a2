@@ -86,6 +86,8 @@ void handleConnection(int sockId) {
 	if(ecode) {
 		// 400 bad request
 		printf("400 bad request\n");
+		char* response = getBadRequestResponse();
+		
 	}
 	else {
 		char fileData[512];
@@ -95,6 +97,11 @@ void handleConnection(int sockId) {
 		if(fileSize == -1) {
 			// 404 file not found
 			printf("404 File not Found\n");
+			char* response = getNotFoundResponse();
+			write(sockId, response, strlen(response));
+			char responseCode[64];
+			int error = getResponseCode(response, responseCode);
+			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
 		else if(fileSize == -2) {
 			// 403 forbidden

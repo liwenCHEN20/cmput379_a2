@@ -110,6 +110,45 @@ char* getBadRequestResponse() {
 	return response;
 }
 
+char* getNotFoundResponse() {
+	int size = 512;
+	char* response = malloc(sizeof(char) * 512);
+	sprintf(response, "HTTP/1.1 404 Not Found\r\nDate: %s\r\nContent-Type: text/html\r\n"
+	"Content-Length: 117\r\n\r\n"
+	"<html><body>\r\n<h2>Document not found</h2>\r\n"
+	"You asked for a document that doesn't exist. That is so sad.\r\n"
+	"<body></html>\r\n", getDate());
+	return response;
+}
+
+char* getForbiddenResponse() {
+	int size = 512;
+	char* response = malloc(sizeof(char) * 512);
+	sprintf(response, "HTTP/1.1 403 Forbidden\r\n"
+		"Date: %s\r\n"
+		"Content-Type: text/html\r\n"
+		"Content-Length: 130\r\n\r\n"
+		"<html><body>\r\n<h2>Permission Denied</h2>\r\n"
+		"You asked for a document you are not permitted to see. It sucks to be you.\r\n"
+		"</body></html>\r\n", getDate());
+	return response;
+}
+
+char* getInternalErrorResponse() {
+	int size = 512;
+	char* response = malloc(sizeof(char) * 512);
+	sprintf(response, "HTTP/1.1 500 Internal Server Error\r\n"
+		"Date: %s\r\n"
+		"Content-Type: text/html\r\n"
+		"Content-Length: 131\r\n\r\n"
+		"<html><body>\r\n<h2>Oops. That didn't work</h2>\r\n"
+		"I had some sort of problem dealing with your request. Sorry, I'm lame.\r\n"
+		"</body></html>/r/n", getDate());
+	return response;
+}
+	
+
+
 char* getValidRequest(char* content) {
 	int length = strlen(content);
 
