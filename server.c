@@ -43,7 +43,6 @@ void runServer(int port, char* docDir, char* logDir)
 
 	sock = socket( AF_INET, SOCK_STREAM, 0);
 
-	/* Following two lines taken from Kirby Banman on the discussion forum */
 	int optval = 1;
 	setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &optval, sizeof(optval));
 	if( sock < 0 ) {
@@ -60,7 +59,11 @@ void runServer(int port, char* docDir, char* logDir)
 		exit(1);
 	}
 
-	//daemon(0, 0);
+	/* Daemonize after trying to connect the main thread/process
+	 * so that error messages are displayed before we stop writing
+	 * to stderr.
+	 */
+	daemon(0, 0);
 	
 	listen(sock, 16);
 
@@ -81,19 +84,31 @@ void runServer(int port, char* docDir, char* logDir)
 
 }
 
+/**
+ * Main function for handling a connection. Each thread/process
+ * will call this after it has processed its arguments.
+ */
 void handleConnection(int sockId) {
+	/* Read the client's request. Since we only really care
+	 * about the first line, 512 bytes is enough to deal with
+	 * obnoxiously long filenames
+	 */
 	char clientRequest[512];
 	read(sockId, clientRequest, sizeof(clientRequest) - 1);
 
-	char* ip = malloc(sizeof(char) * 100);
+	char ip[100];
 	getIpAddress(sockId, ip);
 
 	char* requestHeader = getHeader(clientRequest);
 
-	printf("1\n");
-	char* requestedFile = malloc(sizeof(char) * 512);
+	char requestedFile[512]; 
 	int ecode = processRequestHeader(requestHeader, requestedFile);
+
 	char responseCode[64];
+
+	/* If we fail to process the header, or the requested file contains
+	 * invalid characters, it's a bad request.
+	 */
 	if(ecode || !containsValidCharacters(requestedFile)) {
 		printf("BAD_REQUEST\n");
 		sendErrorResponse(BAD_REQUEST, sockId, responseCode);
@@ -103,51 +118,55 @@ void handleConnection(int sockId) {
 		char fullPath[512];
 		sprintf(fullPath, "%s%s", gDocDir, requestedFile);
 		int fileSize = getFileLength(fullPath);
-		printf("fileSize: %i\n", fileSize);
-		char* fileData = malloc(fileSize + 1);
+		char* fileData = malloc(sizeof(char) * (fileSize + 1));
 		int bytesRead = readFile(fullPath, fileData);
-		printf("2\n");
-		printf("bytesRead: %i\n", bytesRead);
 		
+		/* A negative value for bytesRead indicates an error reading
+		 * the file. See readFile documentation for details.
+		 */
 		if(bytesRead == -1) {
-			printf("NF\n");
 			sendErrorResponse(NOT_FOUND, sockId, responseCode);
 			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
 		else if(bytesRead == -2) {
-			printf("F\n");
 			sendErrorResponse(FORBIDDEN, sockId, responseCode);
 			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
 		else if(bytesRead == -3) {
-			printf("IE\n");
 			sendErrorResponse(INTERNAL_ERROR, sockId, responseCode);
 			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
 		else {
-			printf("VR\n");
 			char* validResponse = getValidResponse(fileData);
 			int bytesWritten = write(sockId, validResponse, strlen(validResponse));
-			char responseCode[64];
 			int error = getResponseCode(validResponse, responseCode);
 			logSuccessMessage(gLogDir, ip, requestHeader, responseCode, bytesWritten, strlen(validResponse));
-			//free(fileData);
-			//free(validResponse);
+
+			free(validResponse);
 		}
 	}
 	close(sockId);
+	free(requestHeader);
 }
 
+/**
+ * This function is in charge of sending an error response to the
+ * socket. It also sets the response code, which is used in logging.
+ */
 void sendErrorResponse(eError error, int sockId, char* responseCode) {
 	char* response = getErrorResponse(error);
 	write(sockId, response, strlen(response));
 	getResponseCode(response, responseCode);
 }
 
+/**
+ * Determines the length of a file by seeking to the end of it and
+ * checking the distance. Returns -1 if the file can't be opened.
+ */
 int getFileLength(char* fileName) {
 	FILE* file = fopen(fileName, "rt");
 	if(file == NULL) {
-		return 0;
+		return -1;
 	}
 	
 	int length = 0;
@@ -159,6 +178,10 @@ int getFileLength(char* fileName) {
 	return length;
 }
 
+/**
+ * Reads a file and stores its contents in data.
+ * Returns the number of bytes read.
+ */
 int readFile(char* fileName, char* data) {
 	FILE* file;
 	char line[90];
@@ -191,14 +214,22 @@ int readFile(char* fileName, char* data) {
 	return fileLength;
 }
 
+/**
+ * Gets the header from an HTTP request. Essentially returns
+ * the first line.
+ */
 char* getHeader(char* request) {
 	char* tempRequest = malloc(sizeof(char) * strlen(request)+1);
 	strcpy(tempRequest, request);
 
 	char* header = strsep(&tempRequest, "\r");
-	return header;
+	return shrinkString(header);
 }
 
+/**
+ * Processes the request header to both determine its validity,
+ * and to retrieve the requested file name from it.
+ */
 int processRequestHeader(char* header, char* requestedFile) {
 	char* myHeader = malloc(sizeof(char) * strlen(header) + 1);
 	strcpy(myHeader, header);
@@ -217,6 +248,10 @@ int processRequestHeader(char* header, char* requestedFile) {
 	}
 }
 
+/**
+ * Checks if a string contains only valid characters for a filename.
+ * Returns 1 if so, 0 otherwise.
+ */
 int containsValidCharacters(char* fileName) {
 	int error;
 	regex_t regex;
@@ -233,6 +268,9 @@ int containsValidCharacters(char* fileName) {
 	return 1;
 }
 
+/**
+ * Gets the response code from a header to use in logging.
+ */
 int getResponseCode(char* header, char* responseCode) {
 	char* myHeader = malloc(sizeof(char) * strlen(header) + 1);
 	strcpy(myHeader, header);
@@ -248,6 +286,9 @@ int getResponseCode(char* header, char* responseCode) {
 	}
 }
 
+/**
+ * Returns the requested file from an HTTP GET request
+ */
 char* getRequestedFile(char* request) {
 	char* buffer = malloc(sizeof(char) * 512);
 	char* get;
@@ -264,13 +305,17 @@ char* getRequestedFile(char* request) {
 		strcpy(file, strsep(&buffer, " "));
 		http = strsep(&buffer, "\n");
 		if(strncmp(http, "HTTP/1.1", 8) != 0) {
-			// error - bad format
+			/* error - bad format */
 		}
 	}
+	free(buffer);
 
 	return file;
 }
 
+/**
+ * Gets the ip address.
+ */
 void getIpAddress(int sockId, char* ip) {
 	struct sockaddr_in from;
 	socklen_t from_size = sizeof(struct sockaddr_in);
@@ -279,6 +324,8 @@ void getIpAddress(int sockId, char* ip) {
 		printf("ip didnt work!\n");
 		printf("error: %s\n", strerror(errno) );
 	}
-	char* tempIp = inet_ntoa(from.sin_addr);
-	strcpy(ip, tempIp);
+//	/*char tempIp[20];
+// = inet_ntoa(from.sin_addr);
+//	strcpy(ip, tempIp);*/
+	sprintf(ip, "%s", inet_ntoa(from.sin_addr));
 }

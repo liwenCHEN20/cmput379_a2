@@ -19,8 +19,6 @@ int handleRequest(int oldSockFd, int newSockFd) {
 
 void* pthread_handleRequest(void* arg) {
 	int sockFd = *(int*) arg;
-	if( sockFd <= 0 ) { // maybe some other condition
-		// probably an error
-	}
+	free(arg);
 	handleConnection(sockFd);
 }

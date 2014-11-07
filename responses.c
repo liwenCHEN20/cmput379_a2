@@ -26,6 +26,9 @@ char* getDate() {
 	return testdate ;*/
 }
 
+/**
+ * Gets a string for the day of the week from its number
+ */
 char* getDayOfWeek(int num_day) {
 	char* day = malloc(sizeof(char) * 3);
 	switch(num_day) {
@@ -57,6 +60,9 @@ char* getDayOfWeek(int num_day) {
 	return day;
 }
 
+/**
+ * Gets a string for the day of the month from its number
+ */
 char* getMonth(int num_month) {
 	char* month = malloc(sizeof(char) * 3);
 	switch(num_month) {
@@ -103,6 +109,9 @@ char* getMonth(int num_month) {
 	return month;
 }
 
+/**
+ * Returns a string to send back to the client from an error code
+ */
 char* getErrorResponse(eError error) {
 	switch(error) {
 		case BAD_REQUEST:
@@ -157,12 +166,17 @@ char* buildErrorResponse(char* header, char* content) {
 char* shrinkString(char* string) {
 	int size = strlen(string)+1;
 	char* newString = malloc(sizeof(char) * size);
+	
 	newString[size-1] = '\0';
 	sprintf(newString, "%s", string);
+	
 	free(string);
 	return newString;
 }
 
+/**
+ * Builds a valid response given some content to return
+ */
 char* getValidResponse(char* content) {
 	int length = strlen(content);
 
@@ -170,5 +184,5 @@ char* getValidResponse(char* content) {
 	sprintf(response, "HTTP/1.1 200 OK\r\nDate: %s\r\nContent-Type: text/html\r\n"
 		"Content-Length: %i\r\n\r\n%s\r\n", getDate(), length, content);
 
-	return response;
+	return shrinkString(response);
 }

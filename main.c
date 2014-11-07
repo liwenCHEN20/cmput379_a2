@@ -12,15 +12,18 @@ int main(int argc, char* args[])
 		usage();
 		return -1;
 	}
-	int port = atoi(args[1]);
-	char* docDir = args[2];
-	char* logDir = args[3];
+	char* error;
 
-	/* do some validation, display usage if bad data */
-	runServer(port, docDir, logDir);
+	int port = atol(args[1]);
+
+	char* docDir = args[2];
+	char* logFile = args[3];
+
+	runServer(port, docDir, logFile);
 }
 
 void usage()
 {
-	printf("Usage:\n%s <port number> <doc directory> <log directory>\n", appName);
+	printf("Usage:\n%s <port number> <doc directory> <log file>\n", appName);
+	printf("Note: Use absolute paths for the directories.\n");
 }
