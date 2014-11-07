@@ -8,11 +8,8 @@ char* appName = "server_p";
 void* pthread_handleRequest(void* arg);
 
 int handleRequest(int oldSockFd, int newSockFd) {
-	printf( "in HandleRequest!\n" );
 	pthread_t thread;
 
-
-	printf( "handlerequest id: %i\n", newSockFd);
 	int* data = malloc(sizeof(int));
 	*data = newSockFd;
 	int error = pthread_create(&thread, NULL, pthread_handleRequest, (void*) data);

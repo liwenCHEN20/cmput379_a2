@@ -3,6 +3,7 @@
 #include <string.h>
 #include <errno.h>
 #include <signal.h>
+#include <regex.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
@@ -23,6 +24,8 @@ void getIpAddress(int sockId, char* ip);
 
 extern int handleRequest(int oldSockFd, int newSockFd);
 void sendErrorResponse(eError error, int sockId, char* responseCode);
+int containsValidCharacters(char* fileName);
+int getFileLength(char* fileName);
 
 void runServer(int port, char* docDir, char* logDir)
 {
@@ -63,19 +66,16 @@ void runServer(int port, char* docDir, char* logDir)
 
 	while(1) {
 		fromlength = sizeof(from);
-		printf("Waiting to accept new connection\n");
 		snew = accept(sock, (struct sockaddr*) &from, &fromlength);
 		if(snew < 0) {
 			perror("Server: accept failed");
 			exit(1);
 		}
-		printf("Accepted socket: %i\n", snew);
 		/* HandleRequest returns 0 for the main process/thread */
 		if(handleRequest(sock, snew) != 0)
 		{
 			break;
 		}
-		printf("Request handled!\n");
 
 	}
 
@@ -90,36 +90,49 @@ void handleConnection(int sockId) {
 
 	char* requestHeader = getHeader(clientRequest);
 
+	printf("1\n");
 	char* requestedFile = malloc(sizeof(char) * 512);
 	int ecode = processRequestHeader(requestHeader, requestedFile);
 	char responseCode[64];
-	if(ecode) {
+	if(ecode || !containsValidCharacters(requestedFile)) {
+		printf("BAD_REQUEST\n");
 		sendErrorResponse(BAD_REQUEST, sockId, responseCode);
 		logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 	}
 	else {
-		char fileData[512];
 		char fullPath[512];
 		sprintf(fullPath, "%s%s", gDocDir, requestedFile);
-		int fileSize = readFile(fullPath, fileData);
-		if(fileSize == -1) {
+		int fileSize = getFileLength(fullPath);
+		printf("fileSize: %i\n", fileSize);
+		char* fileData = malloc(fileSize + 1);
+		int bytesRead = readFile(fullPath, fileData);
+		printf("2\n");
+		printf("bytesRead: %i\n", bytesRead);
+		
+		if(bytesRead == -1) {
+			printf("NF\n");
 			sendErrorResponse(NOT_FOUND, sockId, responseCode);
 			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
-		else if(fileSize == -2) {
+		else if(bytesRead == -2) {
+			printf("F\n");
 			sendErrorResponse(FORBIDDEN, sockId, responseCode);
 			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
-		else if( fileSize == -3) {
+		else if(bytesRead == -3) {
+			printf("IE\n");
 			sendErrorResponse(INTERNAL_ERROR, sockId, responseCode);
 			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
 		else {
-			char* validResponse = getValidRequest(fileData);
+			printf("VR\n");
+			char* validResponse = getValidResponse(fileData);
 			int bytesWritten = write(sockId, validResponse, strlen(validResponse));
 			char responseCode[64];
 			int error = getResponseCode(validResponse, responseCode);
 			logSuccessMessage(gLogDir, ip, requestHeader, responseCode, bytesWritten, strlen(validResponse));
+			//free(fileData);
+			//free(validResponse);
 		}
 	}
 	close(sockId);
@@ -129,6 +142,21 @@ void sendErrorResponse(eError error, int sockId, char* responseCode) {
 	char* response = getErrorResponse(error);
 	write(sockId, response, strlen(response));
 	getResponseCode(response, responseCode);
+}
+
+int getFileLength(char* fileName) {
+	FILE* file = fopen(fileName, "rt");
+	if(file == NULL) {
+		return 0;
+	}
+	
+	int length = 0;
+	fseek(file, 0, SEEK_END);
+	length = ftell(file);
+	fseek(file, 0, SEEK_SET);
+	
+	fclose(file);
+	return length;
 }
 
 int readFile(char* fileName, char* data) {
@@ -187,6 +215,22 @@ int processRequestHeader(char* header, char* requestedFile) {
 		strcpy(requestedFile, file);
 		return 0;
 	}
+}
+
+int containsValidCharacters(char* fileName) {
+	int error;
+	regex_t regex;
+	
+	error = regcomp(&regex, "^[[:alnum:]///._]*$", 0);
+	if(error) {
+		perror("Regex error");
+	}
+	
+	error = regexec(&regex, fileName, 0, NULL, 0);
+	if(error == REG_NOMATCH) {
+		return 0;
+	}
+	return 1;
 }
 
 int getResponseCode(char* header, char* responseCode) {
