@@ -7,7 +7,7 @@ char* appName = "server_p";
 
 void* pthread_handleRequest(void* arg);
 
-void handleRequest(int sockFd) {
+int handleRequest(int sockFd) {
 	printf( "in HandleRequest!\n" );
 	pthread_t thread;
 
@@ -17,6 +17,7 @@ void handleRequest(int sockFd) {
 	*data = sockFd;
 	int error = pthread_create(&thread, NULL, pthread_handleRequest, (void*) data);
 	printf("error: %s\n", strerror(error));
+	return 0;
 	
 }
 

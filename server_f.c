@@ -3,12 +3,15 @@
 
 char* appName = "server_f";
 
-void handleRequest(int sockFd) {
-	if(fork() <= 0) {
-		return;
+int handleRequest(int sockFd) {
+	if(fork() == 0) {
+		/* I am the child process */
+		handleConnection(sockFd);
+		return 1;
 	}
 	else {
-		handleConnection(sockFd);
+		/* I am the parent process */
+		return 0;
 	}
 
 }

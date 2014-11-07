@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/ip.h>
@@ -20,12 +21,13 @@ char* getRequestedFile(char* request);
 void handleConnection(int sockId);
 void getIpAddress(int sockId, char* ip);
 
-extern void handleRequest(int sockFd);
+extern int handleRequest(int sockFd);
 void sendErrorResponse(eError error, int sockId, char* responseCode);
 
 void runServer(int port, char* docDir, char* logDir)
 {
-	daemon(0, 1);
+	daemon(0, 0);
+	signal(SIGCHLD, SIG_IGN);
 	printf("port: %i\ndocDir: %s\nlogDir: %s\n", port, docDir, logDir);
 
 	char test[] = "12345";
@@ -64,7 +66,11 @@ void runServer(int port, char* docDir, char* logDir)
 			exit(1);
 		}
 		printf("sending id: %i\n", snew);
-		handleRequest(snew);
+		/* HandleRequest returns 0 for the main process/thread */
+		if(handleRequest(snew) != 0)
+		{
+			break;
+		}
 
 	}
 
@@ -135,6 +141,7 @@ void handleConnection(int sockId) {
 void sendErrorResponse(eError error, int sockId, char* responseCode) {
 	char* response = getErrorResponse(error);
 	
+	printf("RESPONSE:\n%s\n------------------------------", response);
 	write(sockId, response, strlen(response));
 	getResponseCode(response, responseCode);
 }
