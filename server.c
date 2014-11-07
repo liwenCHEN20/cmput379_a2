@@ -21,6 +21,7 @@ void handleConnection(int sockId);
 void getIpAddress(int sockId, char* ip);
 
 extern void handleRequest(int sockFd);
+void sendErrorResponse(eError error, int sockId, char* responseCode);
 
 void runServer(int port, char* docDir, char* logDir)
 {
@@ -83,10 +84,12 @@ void handleConnection(int sockId) {
 	char* requestedFile = malloc(sizeof(char) * 512);
 	int ecode = processRequestHeader(requestHeader, requestedFile);
 	printf("requested file: \n%s\n", requestedFile);
+	char responseCode[64];
 	if(ecode) {
 		// 400 bad request
 		printf("400 bad request\n");
-		char* response = getBadRequestResponse();
+		sendErrorResponse(BAD_REQUEST, sockId, responseCode);
+		logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		
 	}
 	else {
@@ -97,19 +100,20 @@ void handleConnection(int sockId) {
 		if(fileSize == -1) {
 			// 404 file not found
 			printf("404 File not Found\n");
-			char* response = getNotFoundResponse();
-			write(sockId, response, strlen(response));
-			char responseCode[64];
-			int error = getResponseCode(response, responseCode);
+			sendErrorResponse(NOT_FOUND, sockId, responseCode);
 			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
 		else if(fileSize == -2) {
 			// 403 forbidden
 			printf("403 forbidden\n");
+			sendErrorResponse(FORBIDDEN, sockId, responseCode);
+			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
 		else if( fileSize == -3) {
 			// 500 internal error
 			printf("500 internal error\n");
+			sendErrorResponse(INTERNAL_ERROR, sockId, responseCode);
+			logErrorMessage(gLogDir, ip, requestHeader, responseCode);
 		}
 		else {
 			printf("file data: \n%s\n", fileData);
@@ -125,6 +129,27 @@ void handleConnection(int sockId) {
 		}
 	}
 	close(sockId);
+}
+
+void sendErrorResponse(eError error, int sockId, char* responseCode) {
+	char* response;
+	switch(error) {
+		case BAD_REQUEST:
+			response = getBadRequestResponse();
+			break;
+		case NOT_FOUND:
+			response = getNotFoundResponse();
+			break;
+		case FORBIDDEN:
+			response = getForbiddenResponse();
+			break;
+		case INTERNAL_ERROR:
+			response = getInternalErrorResponse();
+			break;
+	}
+	
+	write(sockId, response, strlen(response));
+	getResponseCode(response, responseCode);
 }
 
 int readFile(char* fileName, char* data) {
