@@ -182,7 +182,7 @@ char* buildErrorResponse(char* header, char* content) {
 	char* response = malloc(sizeof(char) * 512);
 	sprintf(response, "HTTP/1.1 %s\r\n"
 		"Date: %s\r\n"
-		"Content-Type: test/html\r\n"
+		"Content-Type: text/html\r\n"
 		"Content-Length: %i\r\n\r\n"
 		"%s\r\n",
 		header, getDate(), contentLength, content);
