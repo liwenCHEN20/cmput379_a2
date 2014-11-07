@@ -8,11 +8,13 @@
 #include <netinet/in.h>
 #include "server.h"
 #include "responses.h"
+#include "logging.h"
 
 char* appName = "server_p";
 
 void replyToClient(int socketFd);
 int readFile(char* fileName, char* data);
+char* getHeader(char* request);
 char* getRequestedFile(char* request);
 
 void runServer(int port, char* docDir, char* logDir)
@@ -48,12 +50,18 @@ void runServer(int port, char* docDir, char* logDir)
 			perror("Server: accept failed");
 			exit(1);
 		}
+		char* ip = inet_ntoa(from.sin_addr);
+		printf("ip: %s\n", ip);
 
 		char request[512];
 
 		read(snew, request, sizeof(request) - 1);
 
 		printf("Request: \n%s\n\n", request);
+
+
+		char* requestedFile = getRequestedFile(request);
+		printf("File requested: \n%s\n", getRequestedFile(request));
 
 //		char response[] = "HTTP/1.1 200 OK\r\n"
 //"Content-Type: text/html; charset=UTF-8\r\n\r\n"
@@ -89,13 +97,29 @@ void runServer(int port, char* docDir, char* logDir)
 		char indexFile[512];
 		char fileBuffer[512];
 
-		sprintf(indexFile, "%s%s", docDir, "/index.html");
+		sprintf(indexFile, "%s%s", docDir, requestedFile);
 		int fileLength = readFile(indexFile, fileBuffer);
 		printf( "Length: %i\nData: %s\nstrlen(Data): %i\n", fileLength, fileBuffer, strlen(fileBuffer) );
-		printf( "Response: \n---------\n%s\n-----------\n\n", getValidRequest(fileBuffer));
-		char* validResponse = getValidRequest(fileBuffer);
 
-		write(snew, validResponse, strlen(validResponse) - 1);
+		if( fileLength >= 0) {
+			printf( "Response: \n---------\n%s\n-----------\n\n", getValidRequest(fileBuffer));
+			char* validResponse = getValidRequest(fileBuffer);
+
+			write(snew, validResponse, strlen(validResponse) - 1);
+		}
+		else {
+			write(snew, response400, strlen(response400) -1);
+		}
+
+
+		char* header = getHeader(request);
+		printf("Header: %s\nasdfasdf", header);
+		char* header2 = malloc(sizeof(char) * 512);
+		sprintf(header2, "%s", header);
+		printf("Header2: %s\nasdasdad", header2);
+
+		logErrorMessage(logDir, ip, header2, getHeader(getValidRequest(fileBuffer)));
+
 		close(snew);
 	}
 
@@ -116,15 +140,46 @@ int readFile(char* fileName, char* data) {
 			fileLength += strlen(line);
 			data += strlen(line);
 		}
+		else {
+			break;
+		}
 	}
 	fclose(file);
 	return fileLength;
 }
+
+char* getHeader(char* request) {
+	char* tempRequest = malloc(sizeof(char) * strlen(request)+1);
+	strcpy(tempRequest, request);
+
+	char* header = strsep(&tempRequest, "\r");
+	printf("Before newline: --\n%s\n---\nAfter newline: --\n%s\n", header, tempRequest);
+	return header;
+}
 		
 char* getRequestedFile(char* request) {
-	int lineLength = 0;
-	while(request[lineLength] != '\n') {
-		++lineLength;
+	char* buffer = malloc(sizeof(char) * 512);
+	char* get;
+	char* http;
+	char* file = malloc(sizeof(char) * 256);
+
+	strcpy(buffer, request);
+
+	get = strsep(&buffer, " ");
+	if(strncmp(get, "GET", 3) != 0) {
+		// error - bad format
 	}
-	
+	else {
+		strcpy(file, strsep(&buffer, " "));
+		//http = strsep(&buffer, "\n");
+		printf("~~~~\n%s\n~~~~", buffer);
+		http = strsep(&buffer, "\n");
+		printf("\n--1--\n%s\n--2--\n%s\n--3--\n", http, buffer);
+		//strcpy(http, strsep(&buffer, "\n"));
+		if(strncmp(http, "HTTP/1.1", 8) != 0) {
+			// error - bad format
+		}
+	}
+
+	return file;
 }
